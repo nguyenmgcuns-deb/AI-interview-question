@@ -5,10 +5,13 @@ import cors from "cors";
 import { prisma } from "./db";
 import { initSideband } from "./sideband";
 import { calculateResult } from "./result";
+import { practiceRouter } from "./practice";
 
 const app = express();
-app.use(express.json());
+// Large limit so a CV file (sent as base64) fits.
+app.use(express.json({ limit: "10mb" }));
 app.use(cors());
+app.use("/api/v2/practice", practiceRouter);
 app.use(express.text({ type: ["application/sdp", "text/plain"] }));
 
 app.post("/api/v1/pre-interview", async (req, res) => { 

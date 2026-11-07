@@ -1,38 +1,27 @@
 import { z } from "zod";
-import { GoogleGenAI } from "@google/genai";
-import { zodToJsonSchema } from "zod-to-json-schema";
-
-const ai = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY!});
+import { groqJson, s } from "./llm";
 
 const outputSchema = z.object({
-    feedback: z.string().describe("Feedback for the user"),
-    score: z.int().describe("Score out of 10 for their interview"),
+    feedback: z.string(),
+    score: z.number().int().min(0).max(10),
 });
 
-const RESULT_PROMPT = `
-    You are an expert evaluator. Your job is to evaluate the users interview. Give them a score out of 10
-    and also let them know any feedback you have about thier interview.
+export type InterviewResult = z.infer<typeof outputSchema>;
 
-    Please return only a json which looks like this - 
-    {
-        feedback: string,
-        score: number
-    }
+const SYSTEM_PROMPT = `
+You are an expert interview evaluator. Evaluate the user's interview from the transcript.
+Give them a score from 0 to 10 and clear, constructive feedback about their interview
+(strengths, weaknesses, and how to improve).
+`.trim();
 
-    DO NOT RETURN ANY OTHER TEXT
-    {{USER_TRANSCRIPT}}
-`
-
-export async function calculateResult(messages: {type: "Assistant" | "User", message: string, createdAt: Date}[]) {
-    const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: RESULT_PROMPT.replace(`{{USER_TRANSCRIPT}}`, JSON.stringify(messages)),
-        config: {
-            responseFormat: { text: { mimeType: "application/json", schema: zodToJsonSchema(outputSchema) } },
-        },
+export async function calculateResult(
+    messages: { type: "Assistant" | "User"; message: string; createdAt: Date }[],
+): Promise<InterviewResult> {
+    return groqJson({
+        name: "interview_result",
+        system: SYSTEM_PROMPT,
+        user: `Interview transcript:\n${JSON.stringify(messages)}`,
+        jsonSchema: s.obj({ feedback: s.str(), score: s.int() }),
+        schema: outputSchema,
     });
-    console.log(response.text!);
-    const result = outputSchema.parse(JSON.parse(response.text!));
-    return result;
-
 }
